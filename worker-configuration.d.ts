@@ -8,4 +8,7 @@ interface Env {
   APPROVAL_PASSWORD?: string;
   ICLOUD_USERNAME: string;
   ICLOUD_APP_PASSWORD: string;
+  TERMINE_URL?: string;
+  TERMINE_ADMIN_TOKEN?: string;
+  TERMINE_CALENDAR_NAME?: string;
 }

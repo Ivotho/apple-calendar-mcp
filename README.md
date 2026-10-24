@@ -113,6 +113,8 @@ Keep this test in the temporary calendar. If cleanup fails, have the agent give 
 | `calendar_create_event` | `calendar:write` | Create timed, all-day, recurring, invited, located, or alerted events. |
 | `calendar_update_event` | `calendar:write` | Change one occurrence, this and later occurrences, or an entire series. |
 | `calendar_delete_event` | `calendar:write` | Delete one occurrence, this and later occurrences, or an entire series. |
+| `termine_sync_bookings` | `calendar:write` | Optional: imports new website inspection bookings into the calendar named by `TERMINE_CALENDAR_NAME` (default "Termine extern") and acknowledges them. |
+| `termine_list_slots`, `termine_block_add`, `termine_block_list`, `termine_block_remove`, `termine_cancel_booking` | `calendar:write` | Optional: manage the website appointment service. All `termine_*` tools exist only when `TERMINE_URL` and `TERMINE_ADMIN_TOKEN` secrets are set. |
 | `calendar_respond_to_invitation` | `calendar:write` | Accept, decline, or tentatively accept an invitation. |
 
 Update, delete, and invitation-response tools require the latest ETag. Recurring occurrence changes also require the original `recurrenceId` returned by a search.
