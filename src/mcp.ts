@@ -18,8 +18,9 @@ import {
 } from "./calendar";
 import { normalizeConfiguredHostname, publicError } from "./security";
 import { isIanaTimeZone } from "./ical";
+import { syncBookings, termineApi, termineConfig } from "./termine";
 
-type ToolEnv = Pick<Env, "ICLOUD_USERNAME" | "ICLOUD_APP_PASSWORD" | "CALENDAR_TIME_ZONE"> & Pick<Env, "MCP_HOSTNAME">;
+type ToolEnv = Pick<Env, "ICLOUD_USERNAME" | "ICLOUD_APP_PASSWORD" | "CALENDAR_TIME_ZONE"> & Pick<Env, "MCP_HOSTNAME" | "TERMINE_URL" | "TERMINE_ADMIN_TOKEN" | "TERMINE_CALENDAR_NAME">;
 
 const calendarSchema = z.object({
   id: z.string().describe("Opaque calendar ID to pass to event tools."),
@@ -411,6 +412,112 @@ export function createCalendarServer(env: ToolEnv, scopes: readonly string[] = [
       async ({ calendarId, eventId, etag, status }) => {
         try {
           return toolSuccess({ event: await respondToInvitation(credentials(env), { calendarId, eventId, etag }, status) });
+        } catch (error) {
+          return toolFailure(error);
+        }
+      },
+    );
+  }
+
+  const termine = granted.has("calendar:write") ? termineConfig(env) : undefined;
+  if (termine) {
+    const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Datum YYYY-MM-DD");
+    const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("Uhrzeit HH:MM (Europe/Berlin)");
+    server.registerTool(
+      "termine_sync_bookings",
+      {
+        title: "Website-Buchungen übernehmen",
+        description: "Holt neue Objektbegehungs-Buchungen von der Website, trägt jede im Kalender 'Termine extern' ein und bestätigt sie beim Terminservice. Der nächste freie Termin erscheint danach automatisch auf der Website. Ohne neue Buchungen passiert nichts.",
+        inputSchema: z.object({}).strict(),
+        outputSchema: z.object({
+          imported: z.array(z.object({ bookingId: z.string(), label: z.string(), email: z.string() })),
+          failed: z.array(z.object({ bookingId: z.string(), reason: z.string() })),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async () => {
+        try {
+          return toolSuccess(await syncBookings(credentials(env), termine));
+        } catch (error) {
+          return toolFailure(error);
+        }
+      },
+    );
+    server.registerTool(
+      "termine_list_slots",
+      {
+        title: "Aktuell angebotene Website-Termine",
+        description: "Zeigt die Objektbegehungs-Termine, die gerade auf der Website buchbar sind.",
+        inputSchema: z.object({}).strict(),
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async () => {
+        try {
+          return toolSuccess(await termineApi<Record<string, unknown>>(termine, "GET", "/admin/slots"));
+        } catch (error) {
+          return toolFailure(error);
+        }
+      },
+    );
+    server.registerTool(
+      "termine_block_add",
+      {
+        title: "Zeit für Website-Termine sperren",
+        description: "Sperrt Zeit (z. B. Eigentümerversammlung), damit dort keine Objektbegehung buchbar ist. Ohne from/to ist der ganze Tag gesperrt; mit dateTo ein Zeitraum.",
+        inputSchema: z.object({ date, dateTo: date.optional(), from: time.optional(), to: time.optional(), note: z.string().max(200).optional() }).strict(),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async (input) => {
+        try {
+          return toolSuccess(await termineApi<Record<string, unknown>>(termine, "POST", "/admin/blocks", input));
+        } catch (error) {
+          return toolFailure(error);
+        }
+      },
+    );
+    server.registerTool(
+      "termine_block_list",
+      {
+        title: "Gesperrte Zeiten anzeigen",
+        description: "Listet alle Sperren für Website-Termine mit ihrer ID.",
+        inputSchema: z.object({}).strict(),
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async () => {
+        try {
+          return toolSuccess(await termineApi<Record<string, unknown>>(termine, "GET", "/admin/blocks"));
+        } catch (error) {
+          return toolFailure(error);
+        }
+      },
+    );
+    server.registerTool(
+      "termine_block_remove",
+      {
+        title: "Sperre aufheben",
+        description: "Hebt eine Sperre auf (ID aus termine_block_list); die Termine werden wieder buchbar.",
+        inputSchema: z.object({ blockId: z.string().regex(/^[\w-]+$/) }).strict(),
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+      },
+      async ({ blockId }) => {
+        try {
+          return toolSuccess(await termineApi<Record<string, unknown>>(termine, "DELETE", `/admin/blocks/${encodeURIComponent(blockId)}`));
+        } catch (error) {
+          return toolFailure(error);
+        }
+      },
+    );
+    server.registerTool(
+      "termine_cancel_booking",
+      {
+        title: "Website-Buchung stornieren",
+        description: "Storniert eine Buchung (Buchungs-ID steht in der Beschreibung des Kalendereintrags) und gibt den Termin auf der Website wieder frei. Den Kalendereintrag selbst löscht calendar_delete_event.",
+        inputSchema: z.object({ bookingId: z.string().regex(/^[\w-]+$/) }).strict(),
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+      },
+      async ({ bookingId }) => {
+        try {
+          return toolSuccess(await termineApi<Record<string, unknown>>(termine, "POST", `/admin/bookings/${encodeURIComponent(bookingId)}/cancel`));
         } catch (error) {
           return toolFailure(error);
         }
