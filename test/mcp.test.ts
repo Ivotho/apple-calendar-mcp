@@ -5,12 +5,13 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
 import { createCalendarMcpHandler, createCalendarServer } from "../src/mcp";
 
-async function listTools(scopes: string[]) {
+async function listTools(scopes: string[], extra: Record<string, string> = {}) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = createCalendarServer({
     ICLOUD_USERNAME: "owner@example.com",
     ICLOUD_APP_PASSWORD: "test-password",
     CALENDAR_TIME_ZONE: "America/New_York",
+    ...extra,
   }, scopes);
   const client = new Client({ name: "tool-catalog-test", version: "1.0.0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -95,5 +96,21 @@ describe("MCP tool scopes", () => {
     expect(JSON.stringify(create?.inputSchema)).toContain("Apple Calendar Notes field");
     expect(JSON.stringify(create?.inputSchema)).toContain("unrelated to attachments");
     expect(remove?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+  });
+
+  it("adds website appointment tools only with write scope and a configured service", async () => {
+    const extra = { TERMINE_URL: "https://termine.example.workers.dev", TERMINE_ADMIN_TOKEN: "secret-token" };
+    const names = (tools: Array<{ name: string }>) => tools.map((tool) => tool.name).filter((name) => name.startsWith("termine_")).sort();
+
+    expect(names(await listTools(["calendar:read", "calendar:write"]))).toEqual([]);
+    expect(names(await listTools(["calendar:read"], extra))).toEqual([]);
+    expect(names(await listTools(["calendar:read", "calendar:write"], extra))).toEqual([
+      "termine_block_add",
+      "termine_block_list",
+      "termine_block_remove",
+      "termine_cancel_booking",
+      "termine_list_slots",
+      "termine_sync_bookings",
+    ]);
   });
 });
