@@ -407,6 +407,40 @@ export async function createEvent(
   return getEvent(credentials, calendarId, eventId, baseFetch);
 }
 
+export interface OpenedCalendar {
+  client: Awaited<ReturnType<typeof createClient>>;
+  calendar: DAVCalendar;
+}
+
+/** Discovers the account once and returns the calendar with this display name (keeps the Worker under its subrequest limit). */
+export async function openCalendarByName(credentials: Credentials, name: string, baseFetch: typeof fetch = fetch): Promise<OpenedCalendar> {
+  const { client, calendars } = await getCalendars(credentials, baseFetch);
+  const wanted = name.trim().toLowerCase();
+  const calendar = calendars.find((candidate) =>
+    typeof candidate.displayName === "string" && candidate.displayName.trim().toLowerCase() === wanted
+    && (!candidate.components || candidate.components.includes("VEVENT")));
+  if (!calendar) throw new Error(`Kalender "${name}" wurde nicht gefunden.`);
+  return { client, calendar };
+}
+
+/** Writes one event with a fixed UID using a single request. Returns "exists" when that UID is already stored. */
+export async function addEventWithUid(
+  credentials: Credentials,
+  opened: OpenedCalendar,
+  draft: EventDraft,
+  uid: string,
+): Promise<"created" | "exists"> {
+  const built = buildEventCalendar(draft, credentials.username, {
+    defaultTimeZone: credentials.defaultTimeZone,
+    uid,
+    ...(opened.calendar.timezone ? { timeZoneData: opened.calendar.timezone } : {}),
+  });
+  const response = await opened.client.createCalendarObject({ calendar: opened.calendar, iCalString: built.data, filename: built.filename });
+  if (response.status === 412) return "exists";
+  requireDavSuccess(response, "create");
+  return "created";
+}
+
 export async function updateEvent(
   credentials: Credentials,
   selector: EventMutationSelector,

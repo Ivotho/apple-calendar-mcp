@@ -85,6 +85,7 @@ export interface EventDraft {
   status?: EventStatus | undefined;
   attendees?: EventAttendeeInput[] | undefined;
   reminders?: EventReminderInput[] | undefined;
+  travelMinutes?: number | undefined;
   recurrence?: string[] | undefined;
   location?: string | undefined;
   structuredLocation?: StructuredLocation | undefined;
@@ -558,7 +559,17 @@ export function buildEventCalendar(draft: EventDraft, selfEmail: string, options
   if (draft.recurrence) addRecurrence(component, draft.recurrence);
   if (draft.attendees) setAttendees(component, draft.attendees, selfEmail);
   if (draft.reminders) setReminders(component, draft.reminders, draft.title);
+  if (draft.travelMinutes) setTravelTime(component, draft.travelMinutes);
   return { data: root.toString(), filename: `${uid}.ics`, uid };
+}
+
+/** Apple Calendar "Travel Time" field (shown as a block before the event). */
+function setTravelTime(component: ICAL.Component, minutes: number): void {
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) throw new Error("travelMinutes must be a whole number between 1 and 1440.");
+  const property = new ICAL.Property("x-apple-travel-duration");
+  property.resetType("duration");
+  property.setValue(ICAL.Duration.fromSeconds(minutes * 60));
+  component.addProperty(property);
 }
 
 function primaryEvent(root: ICAL.Component): ICAL.Component {

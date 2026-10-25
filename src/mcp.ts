@@ -427,11 +427,12 @@ export function createCalendarServer(env: ToolEnv, scopes: readonly string[] = [
       "termine_sync_bookings",
       {
         title: "Website-Buchungen übernehmen",
-        description: "Holt neue Objektbegehungs-Buchungen von der Website, trägt jede im Kalender 'Termine extern' ein und bestätigt sie beim Terminservice. Der nächste freie Termin erscheint danach automatisch auf der Website. Ohne neue Buchungen passiert nichts.",
+        description: "Holt neue Objektbegehungs-Buchungen von der Website, trägt jede (bis zu 5 pro Aufruf) im Kalender 'Termine extern' ein (Titel 'Objektbegehung', Beginn zur gebuchten Uhrzeit, 2 Stunden Dauer, 1 Stunde Wegzeit, Erinnerungen 2 Tage und 2 Stunden vorher) und bestätigt sie beim Terminservice. Mehrfaches Aufrufen erzeugt keine Doppeleinträge. Der nächste freie Termin erscheint danach automatisch auf der Website. Ohne neue Buchungen passiert nichts.",
         inputSchema: z.object({}).strict(),
         outputSchema: z.object({
           imported: z.array(z.object({ bookingId: z.string(), label: z.string(), email: z.string() })),
           failed: z.array(z.object({ bookingId: z.string(), reason: z.string() })),
+          remaining: z.number().describe("Noch nicht übernommene neue Buchungen; Werkzeug erneut aufrufen, wenn > 0."),
         }),
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       },
