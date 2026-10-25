@@ -10,10 +10,11 @@ describe("website appointment bridge", () => {
     expect(() => termineConfig({ TERMINE_URL: "http://a.example.dev", TERMINE_ADMIN_TOKEN: "t" })).toThrow();
   });
 
-  it("maps a booking to a 90 minute Berlin event", () => {
-    const start = Date.parse("2026-11-02T16:30:00+01:00");
-    const draft = bookingToDraft({ id: "b1", label: "Mo, 02.11. 16:30 Uhr", start, startISO: "2026-11-02T16:30:00+01:00", email: "a@b.de", status: "new" });
-    expect(draft).toMatchObject({ title: "Objektbegehung – a@b.de", start: "2026-11-02T16:30:00+01:00", end: "2026-11-02T17:00:00.000Z", timeZone: "Europe/Berlin" });
+  it("maps a booking to the calendar rules (starts at the booked Berlin time, 2h, 1h travel, two reminders)", () => {
+    const start = Date.parse("2026-10-26T16:30:00+01:00");
+    const draft = bookingToDraft({ id: "b1", label: "Montag, 26.10. 16:30 Uhr", start, startISO: "2026-10-26T16:30:00+01:00", email: "a@b.de", status: "new" });
+    expect(draft).toMatchObject({ title: "Objektbegehung", start: "2026-10-26T16:30:00+01:00", end: "2026-10-26T17:30:00.000Z", travelMinutes: 60, timeZone: "Europe/Berlin", reminders: [{ minutesBefore: 2880 }, { minutesBefore: 120 }] });
+    expect(draft.description).toContain("Objektbegehung für a@b.de. Eingetragen durch Balou.");
     expect(draft.description).toContain("b1");
   });
 
